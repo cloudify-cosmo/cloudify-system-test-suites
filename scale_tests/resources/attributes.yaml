@@ -1,0 +1,3 @@
+blueprint_path: '~/blueprint-scale-example/openstack-blueprint.yaml'
+inputs_path: '~/blueprint-scale-example/inputs.yaml'
+manager_server_flavor_name: m1.2xlarge
