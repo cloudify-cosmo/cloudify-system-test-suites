@@ -1,0 +1,22 @@
+version: 2
+jobs:
+  build:
+    working_directory: ~/cloudify-system-test-suites
+    docker:
+      - image: python:2.7.13
+    steps:
+      - checkout
+      - run:
+          name: Get PR code after merge
+          command: |
+            if [ -n "$CIRCLE_PULL_REQUEST" ]; then
+              PR_ID=${CIRCLE_PULL_REQUEST##*/}
+              git fetch origin +refs/pull/$PR_ID/merge:
+              git checkout -qf FETCH_HEAD
+            fi
+      - run:
+          name: Install flake8
+          command: pip install flake8
+      - run:
+          name: Run static analysis
+          command: flake8 --max-line-length=100
