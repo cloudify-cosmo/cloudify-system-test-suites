@@ -20,8 +20,9 @@ import yaml
 class BlueprintExample(object):
 
     def __init__(self, attributes):
-        self.blueprint_path = attributes.blueprint_path
-        self.inputs_path = attributes.inputs_path
+        dir_name = os.path.dirname(os.path.dirname(__file__))
+        self.blueprint_path = os.path.join(dir_name, attributes.blueprint_path)
+        self.inputs_path = os.path.join(dir_name, attributes.inputs_path)
         self.attributes = attributes
         self._inputs = None
 

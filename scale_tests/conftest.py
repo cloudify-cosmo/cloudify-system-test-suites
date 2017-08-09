@@ -1,3 +1,4 @@
+import os
 import pytest
 
 from cosmo_tester.framework import util
@@ -11,7 +12,8 @@ pytest_plugins = "cosmo_tester.conftest"
 
 @pytest.fixture(scope='module')
 def scale_attributes(attributes, logger):
-    current_attributes = util.get_attributes(logger, resources_dir='scale_tests/resources')
+    resources_path = os.path.join(os.path.dirname(__file__), 'resources')
+    current_attributes = util.get_attributes(logger, resources_dir=resources_path)
     attributes.update(current_attributes)
     return attributes
 
