@@ -20,6 +20,8 @@ from multiprocessing.pool import ThreadPool as Pool
 
 from retrying import retry
 
+from constants import TERMINATED_STATE
+
 
 class ConcurrentResourceCreator(object):
     """Creates cloudify resources on a manager concurrently"""
@@ -44,9 +46,9 @@ class ConcurrentResourceCreator(object):
         self.logger.info('Created {0} deployments in {1:.2f} seconds'.format(
             deployments_count, elapsed_time))
         self._assert_deployments_count(deployments_count)
+        self._wait_for_active_executions()
 
     def install_deployments(self, deployments_count, threads_count):
-        self._waiting_for_active_executions()
         deployments = self.client.deployments.list()
         if len(deployments) < deployments_count:
             self.logger.error("There aren't enough deployments for installing "
@@ -60,18 +62,18 @@ class ConcurrentResourceCreator(object):
                                                      deployment_ids)
         self.logger.info('Installed {0} deployments in {1:.2f} seconds'.format(
             deployments_count, elapsed_time))
+        self._wait_for_active_executions()
 
     def uninstall_all_deployments(self, threads_count):
-        self._waiting_for_active_executions()
         deployments = self.client.deployments.list()
         deployment_ids = [deployment.id for deployment in deployments]
         elapsed_time = self._run_action_concurrently(
             threads_count, self._uninstall_deployment, deployment_ids)
         self.logger.info('Uninstalled {0} deployments in {1:.2f} seconds'.format(
             len(deployments), elapsed_time))
+        self._wait_for_active_executions()
 
     def delete_all_deployments(self, threads_count):
-        self._waiting_for_active_executions()
         deployments = self.client.deployments.list()
         deployment_ids = [deployment.id for deployment in deployments]
         elapsed_time = self._run_action_concurrently(
@@ -89,15 +91,13 @@ class ConcurrentResourceCreator(object):
         end_time = time()
         return end_time - start_time
 
-    @retry(stop_max_attempt_number=10,
-           wait_fixed=60*1000)
-    def _waiting_for_active_executions(self):
+    @retry(stop_max_attempt_number=10, wait_fixed=60*1000)
+    def _wait_for_active_executions(self):
         self.logger.info('Waiting for active executions')
-        active_or_failed = list(ExecutionState.STATES)
-        active_or_failed.remove(ExecutionState.TERMINATED)
-        executions = self.client.executions.list(include_system_workflows=True,
-                                                 status=active_or_failed)
-        assert len(executions.items) == 0
+        executions = self.client.executions.list(include_system_workflows=True)
+        active_executions = [exe for exe in executions if exe.status != TERMINATED_STATE]
+        assert len(active_executions) == 0
+        self.logger.info('All the executions terminated successfully')
 
     def _create_deployment(self, blueprint_id):
         self.client.deployments.create(blueprint_id,
@@ -108,7 +108,11 @@ class ConcurrentResourceCreator(object):
         self.client.executions.start(deployment_id, 'install')
 
     def _uninstall_deployment(self, deployment_id):
-        self.client.executions.start(deployment_id, 'uninstall', force=True)
+        self.client.executions.start(deployment_id,
+                                     'uninstall',
+                                     parameters={'ignore_failure': True},
+                                     allow_custom_parameters=True,
+                                     force=True)
 
     def _delete_deployment(self, deployment_id):
         self.client.deployments.delete(deployment_id)
@@ -116,16 +120,3 @@ class ConcurrentResourceCreator(object):
     def _assert_deployments_count(self, expected_count):
         deployments_list = self.client.deployments.list()
         assert deployments_list.metadata.pagination.total == expected_count
-
-
-class ExecutionState(object):
-    TERMINATED = 'terminated'
-    FAILED = 'failed'
-    CANCELLED = 'cancelled'
-    PENDING = 'pending'
-    STARTED = 'started'
-    CANCELLING = 'cancelling'
-    FORCE_CANCELLING = 'force_cancelling'
-
-    STATES = [TERMINATED, FAILED, CANCELLED, PENDING, STARTED,
-              CANCELLING, FORCE_CANCELLING]
