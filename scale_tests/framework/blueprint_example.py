@@ -20,11 +20,28 @@ import yaml
 class BlueprintExample(object):
 
     def __init__(self, attributes):
-        dir_name = os.path.dirname(os.path.dirname(__file__))
-        self.blueprint_path = os.path.join(dir_name, attributes.blueprint_path)
-        self.inputs_path = os.path.join(dir_name, attributes.inputs_path)
-        self.attributes = attributes
         self._inputs = None
+        self._blueprint_path = None
+        self._inputs_path = None
+        self.blueprint_path = attributes.blueprint_path
+        self.inputs_path = attributes.inputs_path
+        self.attributes = attributes
+
+    @property
+    def blueprint_path(self):
+        return self._blueprint_path
+
+    @blueprint_path.setter
+    def blueprint_path(self, value):
+        self._blueprint_path = self._get_path(value)
+
+    @property
+    def inputs_path(self):
+        return self._inputs_path
+
+    @inputs_path.setter
+    def inputs_path(self, value):
+        self._inputs_path = self._get_path(value)
 
     @property
     def inputs(self):
@@ -40,3 +57,14 @@ class BlueprintExample(object):
                 })
 
         return self._inputs
+
+    def _get_path(self, path):
+        # Going up the directories to scale_tests because the path is relative
+        # to resources directory
+        dir_name = os.path.dirname(os.path.dirname(__file__))
+        file_path = os.path.join(dir_name, 'resources', path)
+
+        if os.path.isfile(file_path):
+            return file_path
+        else:
+            raise ValueError('{} is not a valid file'.format(file_path))
