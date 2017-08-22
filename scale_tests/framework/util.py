@@ -13,8 +13,21 @@
 #    * See the License for the specific language governing permissions and
 #    * limitations under the License.
 
+from time import time
+from constants import PAGINATION_PARAMS
+
 
 def check_disk_space(manager, logger):
     logger.info('The manager disk space :')
     with manager.ssh() as fabric_ssh:
         fabric_ssh.run('df -h /')
+
+
+def get_resource_list(resource_client, resource_name, logger, all_tenants=False):
+    start_time = time()
+    resource_list = resource_client.list(_all_tenants=all_tenants,
+                                         **PAGINATION_PARAMS)
+    end_time = time()
+    logger.info('{0} list took {1:.2f} seconds'.format(resource_name,
+                                                       end_time - start_time))
+    return resource_list

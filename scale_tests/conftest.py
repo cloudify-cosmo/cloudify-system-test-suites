@@ -40,8 +40,7 @@ def blueprint_example(manager, scale_attributes):
 
 @pytest.fixture(scope='module')
 def resource_creator(manager, blueprint_example, logger):
-    creator = ConcurrentResourceCreator(
-        manager.client, blueprint_example, logger)
+    creator = ConcurrentResourceCreator(manager, blueprint_example, logger)
     return creator
 
 
@@ -54,6 +53,8 @@ def deployments_count(request):
 def pytest_addoption(parser):
     parser.addoption('--deployments-count', action='store', default=10,
                      help='how many deployments to create/install')
+    parser.addoption('--tenants-count', action='store', default=10,
+                     help='how many tenants to create')
     parser.addoption('--blueprint-type', action='store', default='monitoring',
                      help="the blueprint's type, one of : {}".format(', '.join(BLUEPRINT_TYPES)))
     parser.addoption('--blueprints-count', action='store', default=10,

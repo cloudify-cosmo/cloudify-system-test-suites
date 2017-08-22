@@ -58,6 +58,10 @@ class BlueprintExample(object):
 
         return self._inputs
 
+    @inputs.setter
+    def inputs(self, blueprint_inputs):
+        self._inputs = blueprint_inputs
+
     def _get_path(self, path):
         # Going up the directories to scale_tests because the path is relative
         # to resources directory
