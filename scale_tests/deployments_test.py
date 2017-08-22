@@ -15,8 +15,7 @@
 
 from time import time
 
-from framework.util import check_disk_space
-from framework.constants import PAGINATION_PARAMS
+from framework import util
 
 
 def test_many_deployments_creation(manager, resource_creator, deployments_count, logger):
@@ -26,14 +25,14 @@ def test_many_deployments_creation(manager, resource_creator, deployments_count,
     start_time = time()
     threads_count = 100
     blueprint_id = resource_creator.upload_blueprint()
-    check_disk_space(manager, logger)
+    util.check_disk_space(manager, logger)
     resource_creator.create_deployments(deployments_count,
                                         threads_count,
                                         blueprint_id,
                                         wait_after_action=10)
     _nodes_list(manager.client, logger)
     _node_instances_list(manager.client, logger)
-    check_disk_space(manager, logger)
+    util.check_disk_space(manager, logger)
     resource_creator.delete_all_deployments(threads_count)
     end_time = time()
     logger.info('{0} took {1:.2f} seconds'.format(
@@ -76,16 +75,8 @@ def test_many_deployments_installs(resource_creator, deployments_count, logger):
 
 
 def _nodes_list(client, logger):
-    start_time = time()
-    nodes_list = client.nodes.list(**PAGINATION_PARAMS)
-    end_time = time()
-    logger.info('Nodes list took {0:.2f} seconds with {1} nodes'
-                .format(end_time - start_time, nodes_list.metadata.pagination.total))
+    util.get_resource_list(client.nodes, 'Nodes', logger)
 
 
 def _node_instances_list(client, logger):
-    start_time = time()
-    node_instances_list = client.node_instances.list(**PAGINATION_PARAMS)
-    end_time = time()
-    logger.info('Nodes instances list took {0:.2f} seconds with {1} nodes'
-                .format(end_time - start_time, node_instances_list.metadata.pagination.total))
+    util.get_resource_list(client.node_instances, 'Nodes instances', logger)

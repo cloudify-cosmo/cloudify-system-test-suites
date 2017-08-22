@@ -20,15 +20,19 @@ from multiprocessing.pool import ThreadPool as Pool
 
 from retrying import retry
 
+from cloudify_rest_client import CloudifyClient
+
+from util import get_resource_list
 from constants import TERMINATED_STATE, PAGINATION_PARAMS
 
 
 class ConcurrentResourceCreator(object):
     """Creates cloudify resources on a manager concurrently"""
 
-    def __init__(self, manager_client, blueprint_example, logger):
+    def __init__(self, manager, blueprint_example, logger):
         self.logger = logger
-        self.client = manager_client
+        self.manager = manager
+        self.client = manager.client
         self.blueprint_example = blueprint_example
         self.wait_after_action = 0
         self._deployments = None
@@ -36,24 +40,22 @@ class ConcurrentResourceCreator(object):
     @property
     def deployments(self):
         if not self._deployments:
-            start_time = time()
-            self._deployments = self.client.deployments.list(**PAGINATION_PARAMS)
-            end_time = time()
-            self.logger.info('Deployments list took {0:.2f} seconds'
-                             .format(end_time - start_time))
+            self._deployments = get_resource_list(
+                self.client.deployments, 'Deployments', self.logger, all_tenants=True)
         return self._deployments
 
-    def upload_blueprint(self, _=None):
+    def upload_blueprint(self, _=None, client=None):
         """
         Uploads a blueprint with random blueprint_id
         _ is unused argument because of the pool.map function signature
         """
+        client = client or self.client
         blueprint_id = uuid.uuid4().hex
-        self.client.blueprints.upload(self.blueprint_example.blueprint_path,
-                                      blueprint_id)
+        client.blueprints.upload(self.blueprint_example.blueprint_path, blueprint_id)
         return blueprint_id
 
     def upload_blueprints(self, blueprints_count, threads_count):
+        self.logger.info('Uploading {0} blueprints...'.format(blueprints_count))
         elapsed_time = self._run_action_concurrently(threads_count,
                                                      self.upload_blueprint,
                                                      range(blueprints_count))
@@ -72,6 +74,17 @@ class ConcurrentResourceCreator(object):
         self.logger.info('Created {0} deployments in {1:.2f} seconds'.format(
             deployments_count, elapsed_time))
         self._assert_deployments_count(deployments_count)
+        self._wait_for_active_executions()
+
+    def create_deployments_in_tenants(self, tenants, threads_count):
+        deployments_cont = len(tenants)
+        self.logger.info('Creating {0} deployments in different tenants...'
+                         .format(deployments_cont))
+        elapsed_time = self._run_action_concurrently(
+            threads_count, self._create_deployment_in_tenant, tenants)
+        self.logger.info('Created {0} deployments in different tenants in {1:.2f} seconds'.
+                         format(deployments_cont, elapsed_time))
+        self._assert_deployments_count(deployments_cont)
         self._wait_for_active_executions()
 
     def install_deployments(self, deployments_count, threads_count):
@@ -109,6 +122,34 @@ class ConcurrentResourceCreator(object):
         self._deployments = 0
         self._assert_deployments_count(0)
 
+    def upload_plugins(self, tenants, threads_count):
+        plugins_count = len(tenants)
+        self.logger.info('Uploading {0} plugins to different tenants...'.format(plugins_count))
+        elapsed_time = self._run_action_concurrently(threads_count,
+                                                     self._upload_plugin,
+                                                     tenants)
+        self.logger.info('Uploaded {0} plugins in {1:.2f} seconds'.
+                         format(plugins_count, elapsed_time))
+        self._assert_plugins_count(plugins_count + 1)
+
+    def create_tenants(self, tenants_count, threads_count):
+        self.logger.info('Creating {} tenants...'.format(tenants_count))
+        tenants_names = ['tenant_{0}'.format(i) for i in range(tenants_count)]
+        elapsed_time = self._run_action_concurrently(threads_count,
+                                                     self._create_tenant,
+                                                     tenants_names)
+        self.logger.info('Created {0} tenants in {1:.2f} seconds'.format(
+            tenants_count, elapsed_time))
+        self._assert_tenants_count(tenants_count + 1)
+        return tenants_names
+
+    def delete_all_tenants(self, tenants, threads_count):
+        self.logger.info('Deleting {0} tenants...'.format(len(tenants)))
+        elapsed_time = self._run_action_concurrently(threads_count, self._delete_tenant, tenants)
+        self.logger.info('Deleted {0} tenants in {1:.2f} seconds'
+                         .format(len(tenants), elapsed_time))
+        self._assert_tenants_count(1)
+
     def _run_action_concurrently(self, threads_count, function, iterable):
         pool = Pool(processes=threads_count)
         start_time = time()
@@ -122,16 +163,26 @@ class ConcurrentResourceCreator(object):
     def _wait_for_active_executions(self):
         self.logger.info('Waiting for active executions')
         executions = self.client.executions.list(include_system_workflows=True,
+                                                 _all_tenants=True,
                                                  **PAGINATION_PARAMS)
         active_executions = [exe for exe in executions if exe.status != TERMINATED_STATE]
         assert len(active_executions) == 0
         self.logger.info('All the executions terminated successfully')
 
-    def _create_deployment(self, blueprint_id):
-        self.client.deployments.create(blueprint_id,
-                                       deployment_id=uuid.uuid4().hex,
-                                       inputs=self.blueprint_example.inputs)
+    def _create_deployment(self, blueprint_id, client=None):
+        client = client or self.client
+        client.deployments.create(blueprint_id,
+                                  deployment_id=uuid.uuid4().hex,
+                                  inputs=self.blueprint_example.inputs)
         sleep(self.wait_after_action)
+
+    def _create_deployment_in_tenant(self, tenant_name):
+        client = CloudifyClient(host=self.manager.ip_address,
+                                username='admin',
+                                password='admin',
+                                tenant=tenant_name)
+        blueprint_id = self.upload_blueprint(client=client)
+        self._create_deployment(blueprint_id, client)
 
     def _install_deployment(self, deployment_id):
         self.client.executions.start(deployment_id, 'install')
@@ -146,13 +197,46 @@ class ConcurrentResourceCreator(object):
     def _delete_deployment(self, deployment_id):
         self.client.deployments.delete(deployment_id)
 
+    def _upload_plugin(self, tenant_name):
+        # A small plugin for testing
+        self.manager.upload_plugin('psutil_windows', tenant_name)
+
+    def _create_tenant(self, tenant_name):
+        self.client.tenants.create(tenant_name)
+
+    def _delete_tenant(self, tenant_name):
+        client = CloudifyClient(host=self.manager.ip_address,
+                                username='admin',
+                                password='admin',
+                                tenant=tenant_name)
+        self._delete_tenant_resources(client)
+        self.client.tenants.delete(tenant_name)
+
+    def _delete_tenant_resources(self, client):
+        deployments = client.deployments.list()
+        for deployment in deployments:
+            client.deployments.delete(deployment.id)
+            client.blueprints.delete(deployment.blueprint_id)
+
+        plugins = client.plugins.list()
+        for plugin in plugins:
+            client.plugins.delete(plugin.id)
+
     def _assert_deployments_count(self, expected_count):
         assert self.deployments.metadata.pagination.total == expected_count
 
     def _assert_blueprints_count(self, expected_count):
-        start_time = time()
-        blueprints_list = self.client.blueprints.list()
-        end_time = time()
-        self.logger.info('Blueprints list took {0:.2f} seconds'.format(
-            end_time - start_time))
-        assert blueprints_list.metadata.pagination.total == expected_count
+        self._assert_resources_count(self.client.blueprints, 'Blueprints', expected_count)
+
+    def _assert_tenants_count(self, expected_count):
+        self._assert_resources_count(self.client.tenants, 'Tenants', expected_count)
+
+    def _assert_plugins_count(self, expected_count):
+        self._assert_resources_count(
+            self.client.plugins, 'Plugins', expected_count, all_tenants=True)
+
+    def _assert_resources_count(
+            self, resource_client, resource_name, expected_count, all_tenants=False):
+        resource_list = get_resource_list(
+            resource_client, resource_name, self.logger, all_tenants=all_tenants)
+        assert resource_list.metadata.pagination.total == expected_count
