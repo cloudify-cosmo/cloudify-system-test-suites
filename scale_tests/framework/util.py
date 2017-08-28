@@ -13,15 +13,8 @@
 #    * See the License for the specific language governing permissions and
 #    * limitations under the License.
 
-MONITORING_BLUEPRINT = 'monitoring'
-NO_MONITORING_BLUEPRINT = 'no-monitoring'
-AGENTLESS_BLUEPRINT = 'agentless'
-BLUEPRINT_TYPES = [
-    MONITORING_BLUEPRINT,
-    NO_MONITORING_BLUEPRINT,
-    AGENTLESS_BLUEPRINT
-]
 
-TERMINATED_STATE = 'terminated'
-
-PAGINATION_PARAMS = {'_offset': 0, '_size': 1000}
+def check_disk_space(manager, logger):
+    logger.info('The manager disk space :')
+    with manager.ssh() as fabric_ssh:
+        fabric_ssh.run('df -h /')

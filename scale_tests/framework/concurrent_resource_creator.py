@@ -15,12 +15,12 @@
 
 import uuid
 import itertools
-from time import time
+from time import time, sleep
 from multiprocessing.pool import ThreadPool as Pool
 
 from retrying import retry
 
-from constants import TERMINATED_STATE
+from constants import TERMINATED_STATE, PAGINATION_PARAMS
 
 
 class ConcurrentResourceCreator(object):
@@ -30,6 +30,18 @@ class ConcurrentResourceCreator(object):
         self.logger = logger
         self.client = manager_client
         self.blueprint_example = blueprint_example
+        self.wait_after_action = 0
+        self._deployments = None
+
+    @property
+    def deployments(self):
+        if not self._deployments:
+            start_time = time()
+            self._deployments = self.client.deployments.list(**PAGINATION_PARAMS)
+            end_time = time()
+            self.logger.info('Deployments list took {0:.2f} seconds'
+                             .format(end_time - start_time))
+        return self._deployments
 
     def upload_blueprint(self):
         blueprint_id = uuid.uuid4().hex
@@ -38,7 +50,9 @@ class ConcurrentResourceCreator(object):
         return blueprint_id
 
     def create_deployments(
-            self, deployments_count, threads_count, blueprint_id):
+            self, deployments_count, threads_count, blueprint_id, wait_after_action=0):
+        self.wait_after_action = wait_after_action
+        self.logger.info('Creating {0} deployments...'.format(deployments_count))
         blueprint_ids = itertools.repeat(blueprint_id, deployments_count)
         elapsed_time = self._run_action_concurrently(threads_count,
                                                      self._create_deployment,
@@ -49,14 +63,14 @@ class ConcurrentResourceCreator(object):
         self._wait_for_active_executions()
 
     def install_deployments(self, deployments_count, threads_count):
-        deployments = self.client.deployments.list()
-        if len(deployments) < deployments_count:
+        if len(self.deployments) < deployments_count:
             self.logger.error("There aren't enough deployments for installing "
                               "{} deployments".format(deployments_count))
             return
 
+        self.logger.info('Installing {0} deployments...'.format(deployments_count))
         deployment_ids = [deployment.id for deployment in
-                          deployments[:deployments_count]]
+                          self.deployments[:deployments_count]]
         elapsed_time = self._run_action_concurrently(threads_count,
                                                      self._install_deployment,
                                                      deployment_ids)
@@ -65,21 +79,22 @@ class ConcurrentResourceCreator(object):
         self._wait_for_active_executions()
 
     def uninstall_all_deployments(self, threads_count):
-        deployments = self.client.deployments.list()
-        deployment_ids = [deployment.id for deployment in deployments]
+        self.logger.info('Uninstalling {0} deployments...'.format(len(self.deployments)))
+        deployment_ids = [deployment.id for deployment in self.deployments]
         elapsed_time = self._run_action_concurrently(
             threads_count, self._uninstall_deployment, deployment_ids)
-        self.logger.info('Uninstalled {0} deployments in {1:.2f} seconds'.format(
-            len(deployments), elapsed_time))
+        self.logger.info('Uninstalled {0} deployments in {1:.2f} seconds'
+                         .format(len(deployment_ids), elapsed_time))
         self._wait_for_active_executions()
 
     def delete_all_deployments(self, threads_count):
-        deployments = self.client.deployments.list()
-        deployment_ids = [deployment.id for deployment in deployments]
+        self.logger.info('Deleting {0} deployments...'.format(len(self.deployments)))
+        deployment_ids = [deployment.id for deployment in self.deployments]
         elapsed_time = self._run_action_concurrently(
             threads_count, self._delete_deployment, deployment_ids)
         self.logger.info('Deleted {0} deployments in {1:.2f} seconds'.format(
-            len(deployments), elapsed_time))
+            len(deployment_ids), elapsed_time))
+        self._deployments = 0
         self._assert_deployments_count(0)
 
     def _run_action_concurrently(self, threads_count, function, iterable):
@@ -94,7 +109,8 @@ class ConcurrentResourceCreator(object):
     @retry(stop_max_attempt_number=10, wait_fixed=60*1000)
     def _wait_for_active_executions(self):
         self.logger.info('Waiting for active executions')
-        executions = self.client.executions.list(include_system_workflows=True)
+        executions = self.client.executions.list(include_system_workflows=True,
+                                                 **PAGINATION_PARAMS)
         active_executions = [exe for exe in executions if exe.status != TERMINATED_STATE]
         assert len(active_executions) == 0
         self.logger.info('All the executions terminated successfully')
@@ -103,6 +119,7 @@ class ConcurrentResourceCreator(object):
         self.client.deployments.create(blueprint_id,
                                        deployment_id=uuid.uuid4().hex,
                                        inputs=self.blueprint_example.inputs)
+        sleep(self.wait_after_action)
 
     def _install_deployment(self, deployment_id):
         self.client.executions.start(deployment_id, 'install')
@@ -118,5 +135,4 @@ class ConcurrentResourceCreator(object):
         self.client.deployments.delete(deployment_id)
 
     def _assert_deployments_count(self, expected_count):
-        deployments_list = self.client.deployments.list()
-        assert deployments_list.metadata.pagination.total == expected_count
+        assert self.deployments.metadata.pagination.total == expected_count

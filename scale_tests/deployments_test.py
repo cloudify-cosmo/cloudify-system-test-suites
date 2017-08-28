@@ -15,8 +15,32 @@
 
 from time import time
 
+from framework.util import check_disk_space
+from framework.constants import PAGINATION_PARAMS
 
-def test_many_deployments_creation(resource_creator, deployments_count, logger):
+
+def test_many_deployments_creation(manager, resource_creator, deployments_count, logger):
+    """
+    Test many deployments creation
+    """
+    start_time = time()
+    threads_count = 100
+    blueprint_id = resource_creator.upload_blueprint()
+    check_disk_space(manager, logger)
+    resource_creator.create_deployments(deployments_count,
+                                        threads_count,
+                                        blueprint_id,
+                                        wait_after_action=10)
+    _nodes_list(manager.client, logger)
+    _node_instances_list(manager.client, logger)
+    check_disk_space(manager, logger)
+    resource_creator.delete_all_deployments(threads_count)
+    end_time = time()
+    logger.info('{0} took {1:.2f} seconds'.format(
+        'test_many_deployments_creation', end_time - start_time))
+
+
+def test_many_deployments_creation_concurrent(resource_creator, deployments_count, logger):
     """
     Test many deployments creation simultaneously
     """
@@ -29,7 +53,7 @@ def test_many_deployments_creation(resource_creator, deployments_count, logger):
     resource_creator.delete_all_deployments(threads_count)
     end_time = time()
     logger.info('{0} took {1:.2f} seconds'.format(
-        'test_many_deployments_creation', end_time - start_time))
+        'test_many_deployments_creation_concurrent', end_time - start_time))
 
 
 def test_many_deployments_installs(resource_creator, deployments_count, logger):
@@ -49,3 +73,19 @@ def test_many_deployments_installs(resource_creator, deployments_count, logger):
     end_time = time()
     logger.info('{0} took {1:.2f} seconds'.format(
         'test_many_deployments_installs', end_time - start_time))
+
+
+def _nodes_list(client, logger):
+    start_time = time()
+    nodes_list = client.nodes.list(**PAGINATION_PARAMS)
+    end_time = time()
+    logger.info('Nodes list took {0:.2f} seconds with {1} nodes'
+                .format(end_time - start_time, nodes_list.metadata.pagination.total))
+
+
+def _node_instances_list(client, logger):
+    start_time = time()
+    node_instances_list = client.node_instances.list(**PAGINATION_PARAMS)
+    end_time = time()
+    logger.info('Nodes instances list took {0:.2f} seconds with {1} nodes'
+                .format(end_time - start_time, node_instances_list.metadata.pagination.total))
