@@ -43,11 +43,19 @@ class ConcurrentResourceCreator(object):
                              .format(end_time - start_time))
         return self._deployments
 
-    def upload_blueprint(self):
+    def upload_blueprint(self, _):
         blueprint_id = uuid.uuid4().hex
         self.client.blueprints.upload(self.blueprint_example.blueprint_path,
                                       blueprint_id)
         return blueprint_id
+
+    def upload_blueprints(self, blueprints_count, threads_count):
+        elapsed_time = self._run_action_concurrently(threads_count,
+                                                     self.upload_blueprint,
+                                                     range(blueprints_count))
+        self.logger.info('Uploaded {0} blueprints in {1:.2f} seconds'.format(
+            blueprints_count, elapsed_time))
+        self._assert_blueprints_count(blueprints_count)
 
     def create_deployments(
             self, deployments_count, threads_count, blueprint_id, wait_after_action=0):
@@ -136,3 +144,11 @@ class ConcurrentResourceCreator(object):
 
     def _assert_deployments_count(self, expected_count):
         assert self.deployments.metadata.pagination.total == expected_count
+
+    def _assert_blueprints_count(self, expected_count):
+        start_time = time()
+        blueprints_list = self.client.blueprints.list()
+        end_time = time()
+        self.logger.info('Blueprints list took {0:.2f} seconds'.format(
+            end_time - start_time))
+        assert blueprints_list.metadata.pagination.total == expected_count

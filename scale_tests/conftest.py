@@ -56,6 +56,8 @@ def pytest_addoption(parser):
                      help='how many deployments to create/install')
     parser.addoption('--blueprint-type', action='store', default='monitoring',
                      help="the blueprint's type, one of : {}".format(', '.join(BLUEPRINT_TYPES)))
+    parser.addoption('--blueprints-count', action='store', default=10,
+                     help='how many blueprints to upload')
 
 
 def _install_datadog_agent(manager, logger):
