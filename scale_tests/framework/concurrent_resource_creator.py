@@ -43,7 +43,11 @@ class ConcurrentResourceCreator(object):
                              .format(end_time - start_time))
         return self._deployments
 
-    def upload_blueprint(self, _):
+    def upload_blueprint(self, _=None):
+        """
+        Uploads a blueprint with random blueprint_id
+        _ is unused argument because of the pool.map function signature
+        """
         blueprint_id = uuid.uuid4().hex
         self.client.blueprints.upload(self.blueprint_example.blueprint_path,
                                       blueprint_id)
