@@ -15,7 +15,7 @@
 
 from time import time
 
-from framework.util import check_disk_space
+from framework import util
 
 
 def test_many_blueprints_uploads(manager, resource_creator, request, logger):
@@ -23,11 +23,15 @@ def test_many_blueprints_uploads(manager, resource_creator, request, logger):
     Test many blueprints uploads
     """
     start_time = time()
-    threads_count = 50
+    threads_count = 20
     blueprints_count = int(request.config.getoption('--blueprints-count'))
-    check_disk_space(manager, logger)
+    util.check_disk_space(manager, logger)
     resource_creator.upload_blueprints(blueprints_count, threads_count)
-    check_disk_space(manager, logger)
+
+    # Creating one deployment to see how much time it takes
+    blueprint_id = resource_creator.upload_blueprint()
+    util.create_one_deployment(resource_creator, blueprint_id, logger)
+    util.check_disk_space(manager, logger)
     end_time = time()
     logger.info('{0} took {1:.2f} seconds'.format('test_many_blueprints_uploads',
                                                   end_time - start_time))

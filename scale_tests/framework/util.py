@@ -14,7 +14,9 @@
 #    * limitations under the License.
 
 from time import time
-from constants import PAGINATION_PARAMS
+from retrying import retry
+
+from constants import TERMINATED_STATE, PAGINATION_PARAMS
 
 
 def check_disk_space(manager, logger):
@@ -31,3 +33,24 @@ def get_resource_list(resource_client, resource_name, logger, all_tenants=False)
     logger.info('{0} list took {1:.2f} seconds'.format(resource_name,
                                                        end_time - start_time))
     return resource_list
+
+
+def create_one_deployment(resource_creator, blueprint_id, logger):
+    logger.info('Creating 1 deployment...')
+    start_time = time()
+    deployment_id = resource_creator.create_deployment(blueprint_id=blueprint_id)
+    _wait_for_deployment_executions(deployment_id, resource_creator.client, logger)
+    resource_creator.deployments = None
+    end_time = time()
+    logger.info('Created 1 deploymet in {0:.2f} seconds'.format(end_time - start_time))
+
+
+@retry(stop_max_attempt_number=10, wait_fixed=1000)
+def _wait_for_deployment_executions(deployment_id, manager_client, logger):
+    logger.info('Waiting for active executions of deployment_id {}'.format(deployment_id))
+    executions = manager_client.executions.list(deployment_id=deployment_id,
+                                                **PAGINATION_PARAMS)
+    active_executions = [exe for exe in executions if
+                         exe.status != TERMINATED_STATE]
+    assert len(active_executions) == 0
+    logger.info('The executions terminated successfully')

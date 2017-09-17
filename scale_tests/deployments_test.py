@@ -24,12 +24,16 @@ def test_many_deployments_creation(manager, resource_creator, deployments_count,
     """
     start_time = time()
     threads_count = 100
+    deployments_count -= 1
     blueprint_id = resource_creator.upload_blueprint()
     util.check_disk_space(manager, logger)
     resource_creator.create_deployments(deployments_count,
                                         threads_count,
                                         blueprint_id,
                                         wait_after_action=10)
+
+    # Creating one last deployment to see how much time it takes
+    util.create_one_deployment(resource_creator, blueprint_id, logger)
     _nodes_list(manager.client, logger)
     _node_instances_list(manager.client, logger)
     util.check_disk_space(manager, logger)
