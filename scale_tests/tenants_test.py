@@ -26,31 +26,39 @@ def test_tenants_with_resources(manager, resource_creator, request, logger):
     tenants_count = int(request.config.getoption('--tenants-count'))
     threads_count = 50
     tenants = resource_creator.create_tenants(tenants_count, threads_count)
+    _create_tenants_resources(manager, resource_creator, tenants)
+    resource_creator.delete_all_tenants(tenants, threads_count=10)
+    end_time = time()
+    logger.info('{0} took {1:.2f} seconds and created {2} tenants'
+                .format('test_tenants_with_resources', end_time - start_time, tenants_count))
+
+
+def test_many_tenants_creation(manager, resource_creator, logger):
+    """
+    Test how many tenants can be created on a manager
+    """
+    start_time = time()
+    tenants_count = 10000
+    tenants = resource_creator.create_tenants(tenants_count, threads_count=100)
+
+    # Take only the first 1000 tenants
+    tenants = tenants[:1000]
+    _create_tenants_resources(manager, resource_creator, tenants)
+    end_time = time()
+    logger.info('{0} took {1:.2f} seconds and created {2} tenants'.format(
+        'test_many_tenants_creation', end_time - start_time, tenants_count))
+
+
+def _create_tenants_resources(manager, resource_creator, tenants):
     resource_creator.upload_plugins(tenants, threads_count=10)
     _change_blueprint_to_simple(manager, resource_creator)
-    resource_creator.create_deployments_in_tenants(tenants, threads_count)
+    resource_creator.create_deployments_in_tenants(tenants, threads_count=50)
     client = CloudifyClient(
         host=manager.ip_address, username='admin', password='admin', tenant=tenants[0])
 
     # Only one deployment per tenant
     deployments = client.deployments.list()
     assert deployments.metadata.pagination.total == 1
-    resource_creator.delete_all_tenants(tenants, threads_count)
-    end_time = time()
-    logger.info('{0} took {1:.2f} seconds and created {2} tenants'
-                .format('test_tenants_with_resources', end_time - start_time, tenants_count))
-
-
-def test_many_tenants_creation(resource_creator, logger):
-    """
-    Test how many tenants can be created on a manager
-    """
-    start_time = time()
-    tenants_count = 10000
-    resource_creator.create_tenants(tenants_count, threads_count=100)
-    end_time = time()
-    logger.info('{0} took {1:.2f} seconds and created {2} tenants'.format(
-        'test_many_tenants_creation', end_time - start_time, tenants_count))
 
 
 def _change_blueprint_to_simple(manager, resource_creator):
