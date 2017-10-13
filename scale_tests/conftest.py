@@ -2,19 +2,21 @@ import os
 import pytest
 
 from cosmo_tester.framework import util
-from cosmo_tester.framework.cluster import CloudifyCluster
+from cosmo_tester.framework.test_hosts import TestHosts
 
 from .framework.constants import BLUEPRINT_TYPES
 from .framework.blueprint_example import BlueprintExample
 from .framework.concurrent_resource_creator import ConcurrentResourceCreator
 
 pytest_plugins = "cosmo_tester.conftest"
+DATADOG_INSTALL_SCRIPT = 'https://raw.githubusercontent.com/DataDog/dd-agent/master/packaging/datadog-agent/source/install_agent.sh'  # NOQA
 
 
 @pytest.fixture(scope='module')
 def scale_attributes(attributes, logger):
     resources_path = os.path.join(os.path.dirname(__file__), 'resources')
-    current_attributes = util.get_attributes(logger, resources_dir=resources_path)
+    current_attributes = util.get_attributes(
+        logger, resources_dir=resources_path)
     attributes.update(current_attributes)
     return attributes
 
@@ -22,13 +24,15 @@ def scale_attributes(attributes, logger):
 @pytest.fixture(scope='module')
 def manager(cfy, ssh_key, module_tmpdir, scale_attributes, logger):
     """Creates a cloudify manager from an image in rackspace OpenStack."""
-    cluster = CloudifyCluster.create_image_based(
-            cfy, ssh_key, module_tmpdir, scale_attributes, logger)
-    current_manager = cluster.managers[0]
+    cluster = TestHosts(cfy, ssh_key, module_tmpdir, scale_attributes, logger)
+    cluster.create()
+    current_manager = cluster.instances[0]
     _install_datadog_agent(current_manager, logger)
     current_manager.use()
-    yield current_manager
-    cluster.destroy()
+    try:
+        yield current_manager
+    finally:
+        cluster.destroy()
 
 
 @pytest.fixture(scope='module')
@@ -56,7 +60,8 @@ def pytest_addoption(parser):
     parser.addoption('--tenants-count', action='store', default=10,
                      help='how many tenants to create')
     parser.addoption('--blueprint-type', action='store', default='monitoring',
-                     help="the blueprint's type, one of : {}".format(', '.join(BLUEPRINT_TYPES)))
+                     help="the blueprint's type, one of : {}"
+                          .format(', '.join(BLUEPRINT_TYPES)))
     parser.addoption('--blueprints-count', action='store', default=10,
                      help='how many blueprints to upload')
 
@@ -68,8 +73,7 @@ def _install_datadog_agent(manager, logger):
     if not dd_api_key:
         raise Exception('DD_API_KEY environment variable is not set')
 
-    install_cmd = 'DD_HOSTNAME={0} DD_API_KEY={1} bash -c "$(curl -L https://' \
-                  'raw.githubusercontent.com/DataDog/dd-agent/master/packaging/datadog-agent/' \
-                  'source/install_agent.sh)"'.format('scale-tests', dd_api_key)
+    install_cmd = ('DD_HOSTNAME={0} DD_API_KEY={1} bash -c "$(curl -L {2})"'
+                   .format('scale-tests', dd_api_key, DATADOG_INSTALL_SCRIPT))
     with manager.ssh() as fabric_ssh:
         fabric_ssh.sudo(install_cmd)
