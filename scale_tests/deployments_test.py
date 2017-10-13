@@ -15,7 +15,7 @@
 
 from time import time
 
-from framework import util
+from .framework import util
 
 
 def test_many_deployments_creation(manager, resource_creator, deployments_count, logger):

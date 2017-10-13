@@ -22,8 +22,8 @@ from retrying import retry
 
 from cloudify_rest_client import CloudifyClient
 
-from util import get_resource_list
-from constants import TERMINATED_STATE, PAGINATION_PARAMS
+from .util import get_resource_list
+from .constants import TERMINATED_STATE, PAGINATION_PARAMS
 
 
 class ConcurrentResourceCreator(object):

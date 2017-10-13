@@ -15,7 +15,7 @@
 
 from time import time
 
-from framework.constants import BLUEPRINT_TYPES
+from .framework.constants import BLUEPRINT_TYPES
 
 
 def test_agents(resource_creator, deployments_count, request, logger):

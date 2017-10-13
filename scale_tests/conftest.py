@@ -4,9 +4,9 @@ import pytest
 from cosmo_tester.framework import util
 from cosmo_tester.framework.cluster import CloudifyCluster
 
-from framework.constants import BLUEPRINT_TYPES
-from framework.blueprint_example import BlueprintExample
-from framework.concurrent_resource_creator import ConcurrentResourceCreator
+from .framework.constants import BLUEPRINT_TYPES
+from .framework.blueprint_example import BlueprintExample
+from .framework.concurrent_resource_creator import ConcurrentResourceCreator
 
 pytest_plugins = "cosmo_tester.conftest"
 

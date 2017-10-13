@@ -15,7 +15,7 @@
 
 from time import time
 
-from framework import util
+from .framework import util
 
 
 def test_many_blueprints_uploads(manager, resource_creator, request, logger):

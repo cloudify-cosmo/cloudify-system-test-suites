@@ -16,7 +16,7 @@
 from time import time
 from retrying import retry
 
-from constants import TERMINATED_STATE, PAGINATION_PARAMS
+from .constants import TERMINATED_STATE, PAGINATION_PARAMS
 
 
 def check_disk_space(manager, logger):
